@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted,  shallowRef  } from 'vue'
 import "ol/ol.css";
 import Map from "ol/Map";
 import View from "ol/View";
@@ -14,7 +14,7 @@ import TileLayer from "ol/layer/Tile";
 import OSM from "ol/source/OSM";
 import MapTools from './MapTools.vue';
 
-const map = ref<Map | null>(null)
+const map = shallowRef<Map | null>(null)
 
 onMounted(() => {
   const base = new TileLayer({ source: new OSM() })
