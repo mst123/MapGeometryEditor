@@ -11,7 +11,7 @@ import { createVectorLayer } from "./map-method";
 import { RENDER_LAYER, EDIT_LAYER } from "../const/symbol";
 import { MAP_TOOL } from "../const";
 import { renderLayerStyle, editLayerStyle } from "./layer-style";
-import { message } from "." /message";
+import { message } from "./message.js";
 // 简单处理，弱化业务属性
 // 每个功能必须关闭后 在使用其他功能
 
