@@ -20,6 +20,7 @@ declare module '@turf/turf' {
   export function booleanEqual(a: any, b: any): boolean
   export function kinks(polygon: any): any
   export function area(polygon: any): number
+  export function point(coords: any, options?: any): any
 
   // 线/面转换与偏移
   export function lineOffset(line: any, distance: number, options?: any): any
