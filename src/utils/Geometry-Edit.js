@@ -39,105 +39,18 @@ class GeometryEdit {
     // 当前重叠的图斑（用于弹窗选择）
     this.overlappingFeatures = [];
 
+    // 历史记录
+    this.undoStack = [];
+    this.stackIndex = -1;
+    
     this._init();
   }
 
   _init() {
+    // 开启图斑选择功能
     this._addSelectInteraction();
   }
 
-  // 处理重叠图斑
-  _handleOverlappingFeatures(features) {
-    // 保存当前重叠的图斑
-    this.overlappingFeatures = features;
-    
-    // 如果有弹窗回调函数，显示弹窗
-    if (this.showFeatureDialog) {
-      const callbacks = {};
-      this.showFeatureDialog(features, callbacks);
-      // 注意：这里不等待Promise，因为弹窗的确认/取消会通过回调函数处理
-    } else {
-      // 如果没有弹窗功能，默认选择第一个
-      console.warn("未提供弹窗回调函数，默认选择第一个图斑");
-      this._selectFeature(features[0]);
-    }
-  }
-
-  // 处理用户选择图斑（从弹窗确认）
-  _handleFeatureSelect(feature) {
-    this._selectFeature(feature);
-    // 清空重叠图斑列表
-    this.overlappingFeatures = [];
-  }
-
-  // 处理用户取消选择（从弹窗取消）
-  _handleFeatureCancel() {
-    // 清空重叠图斑列表，不选择任何图斑
-    this.overlappingFeatures = [];
-  }
-
-  // 选中图斑的通用方法
-  _selectFeature(feature) {
-    // 如果已经选中，则取消选中
-    if (this.selectedFeature.includes(feature)) {
-      feature.set("_status", "normal");
-      this.selectedFeature.splice(
-        this.selectedFeature.indexOf(feature),
-        1
-      );
-    } else {
-      // 添加选中
-      feature.set("_status", "selected");
-      this.selectedFeature.unshift(feature);
-    }
-  }
-  // 需要开启图斑选择功能
-  _addSelectInteraction() {
-    this.map.on("click", (e) => {
-      if (this.activeTool.value) {
-        // 有值代表有功能开启中，关闭选择功能
-        return;
-      }
-      console.log("click");
-
-      // getFeaturesAtPixel
-      const features = this.map.getFeaturesAtPixel(e.pixel, {
-        layerFilter: (layer) => {
-          return layer === this.renderLayer;
-        },
-      });
-
-      // 处理重复图斑
-      if (features.length > 1) {
-        // 重叠图斑 需要选择
-        this._handleOverlappingFeatures(features);
-      } else {
-        const feature = features[0];
-        // 点击空白移出所有
-        if (!feature) {
-          this.selectedFeature.forEach((feature) => {
-            feature.set("_status", "normal");
-          });
-          this.selectedFeature = [];
-        } else {
-          // 已经选中 则取消选中
-          if (this.selectedFeature.includes(feature)) {
-            // 删除
-            feature.set("_status", "normal");
-            this.selectedFeature.splice(
-              this.selectedFeature.indexOf(feature),
-              1
-            );
-          } else {
-            // 添加
-            feature.set("_status", "selected");
-            // NOTICE 为什么从前边开始加？
-            this.selectedFeature.unshift(feature);
-          }
-        }
-      }
-    });
-  }
   // 新增
   addNew() {
     if (!this._checkActiveTool(MAP_TOOL.ADD_NEW)) return;
@@ -211,10 +124,7 @@ class GeometryEdit {
         )[0];
 
         this.renderLayerSource.addFeature(handledFeature);
-        // 删除原图形
-        setTimeout(() => {
-          this.renderLayerSource.removeFeature(evt.feature);
-        }, 0);
+        this._clearDrawEffect(evt.feature);
       }
     });
   }
@@ -266,15 +176,20 @@ class GeometryEdit {
     });
   }
 
-  // TODO 重画途中 撤销会有问题
   featureTransfer(options = {}) {
     if (!this._checkActiveTool(MAP_TOOL.FEATURE_TRANSFER)) return;
-
+    const { snap = false, normalComplete = false } = options;
     // 关闭
     if (this.activeTool.value === MAP_TOOL.FEATURE_TRANSFER) {
-      this._clearInteractions();
-      this.activeTool.value = null;
-      return;
+      // 程序正常关闭
+      if (normalComplete) {
+        this._clearInteractions();
+        this.activeTool.value = null;
+        return;
+      } else {
+        // TODO 中途取消 考虑用历史记录 回退
+        
+      }
     }
     if (this.selectedFeature.length !== 1) {
       message.error("仅允许一个图形！");
@@ -282,14 +197,14 @@ class GeometryEdit {
     }
     // 开启功能
     this.activeTool.value = MAP_TOOL.FEATURE_TRANSFER;
-    // 显示图斑的节点 方便修改
+    // TODO 显示图斑的节点 方便修改 边界加虚线，可能会更好
     const points = turf.explode(
       new GeoJSON().writeFeatureObject(this.selectedFeature[0])
     );
     this.editLayer.setZIndex(999);
 
     // 是否开启吸附
-    const { snap = false } = options;
+    
     if (snap) {
       // 监听 addfeatures 事件，确保 features 添加完成后再创建 Snap
       const handleAddFeatures = () => {
@@ -317,7 +232,7 @@ class GeometryEdit {
       this.selectedFeature = [evt.feature];
       this.editLayerSource.clear();
       // 关闭功能
-      this.featureTransfer();
+      this.featureTransfer({ normalComplete: true });
     });
     this.map.addInteraction(draw);
     this.interactionList.push(draw);
@@ -362,10 +277,8 @@ class GeometryEdit {
         );
 
         // 删除原始图形和分割线
-        this.renderLayer.once("postrender", () => {
-          this.renderLayerSource.removeFeature(this.selectedFeature.shift());
-          this.renderLayerSource.removeFeature(evt.feature);
-        });
+        this.renderLayerSource.removeFeature(this.selectedFeature.shift());
+        this._clearDrawEffect(evt.feature);
       } catch (error) {
         console.log(error);
         return message.error("出现未知错误");
@@ -481,7 +394,7 @@ class GeometryEdit {
 
       // 删除原图形
       this.renderLayerSource.removeFeature(maskFeature);
-      this.renderLayerSource.removeFeature(evt.feature);
+      this._clearDrawEffect(evt.feature);
 
       // 添加处理后图形
       this.renderLayerSource.addFeature(result);
@@ -511,9 +424,103 @@ class GeometryEdit {
     this.renderLayerSource.removeFeature(this.selectedFeature[0]);
     const features = new GeoJSON().readFeatures(featureCollection);
     this.renderLayerSource.addFeatures(features);
-    console.log(features);
-    
     this.selectedFeature = [...features];
+  }
+
+  // 图斑整形
+  plastic() {
+    if (!this._checkActiveTool(MAP_TOOL.PLASTIC)) return;
+
+    // 关闭
+    if (this.activeTool.value === MAP_TOOL.PLASTIC) {
+      this._clearInteractions();
+      this.activeTool.value = null;
+      return;
+    }
+
+    if (this.selectedFeature.length !== 1) {
+      message.error("仅允许一个图形！");
+      return;
+    }
+    // 开启功能
+    this.activeTool.value = MAP_TOOL.PLASTIC;
+    const draw = new Draw({
+      source: this.renderLayerSource,
+      type: "LineString"
+    });
+    this.map.addInteraction(draw);
+    this.interactionList.push(draw);
+
+    draw.on("drawend", evt => {
+      try {
+        const geoLineString = new GeoJSON().writeFeatureObject(evt.feature);
+        const coordinates = geoLineString.geometry.coordinates;
+        const startPonit = coordinates[0];
+        const endPonit = coordinates[coordinates.length - 1];
+        const currentPolygon = JSON.parse(
+          new GeoJSON().writeFeature(this.selectedFeature[0])
+        );
+        const startInPolygon = turf.booleanPointInPolygon(startPonit, currentPolygon);
+        const endInPolygon = turf.booleanPointInPolygon(endPonit, currentPolygon);
+        if (startInPolygon && endInPolygon) { // 起点终点均在图形里 共边加合并
+          coordinates.push(startPonit); // 共边画面图形
+          const commonLinePolygon = turf.lineToPolygon(turf.lineString(coordinates));
+          const newUnionPolygon = new GeoJSON().readFeature(turf.union(currentPolygon, commonLinePolygon));
+          // 添加新图形
+          this.renderLayer.getSource().addFeature(newUnionPolygon);
+          // 删除原始图形
+          this.renderLayer.getSource().removeFeature(this.selectedFeature[0]);
+
+          // 绘制结束前后draw图形是不相等的
+          this.selectedFeature = [newUnionPolygon];
+          this._clearDrawEffect(evt.feature);
+          this.plastic();
+        } else if ((!startInPolygon) && (!endInPolygon)) { // 起点终点均不在在图形里 切割加删除
+          this._plasticSplit(evt.feature, [this.selectedFeature[0]]);
+        } else {
+          this.plastic();
+          this._clearDrawEffect(evt.feature);
+          message.error("请确认起点、终点位置");
+        }
+      } catch (error) {
+        console.log(error);
+        
+        this._clearDrawEffect(evt.feature);
+        message.error("请规范操作");
+      }
+    });
+  }
+
+  _plasticSplit(lineString, removeFeaGeoArr) {
+    let todoPolygon = new GeoJSON().writeFeatureObject(this.selectedFeature[0]);
+    if (todoPolygon.geometry.type === "MultiPolygon" && todoPolygon.geometry.coordinates[0].length > 1) { // 转为普通面
+      if (todoPolygon.geometry.coordinates.length > 1) {
+        return message.error("不支持多面");
+      }
+      todoPolygon.geometry.coordinates = todoPolygon.geometry.coordinates[0];
+    }
+    // 拆分
+    const geoLineString = new GeoJSON().writeFeatureObject(lineString);
+    const splitFeatureList = this._polygonCut(todoPolygon, geoLineString).features;
+    if (splitFeatureList.length > 2) {
+      this._clearDrawEffect(lineString);
+      return message.error("只允许简单切割");
+    }
+    const attr = todoPolygon.properties;
+    if (turf.area(splitFeatureList[0]) > turf.area(splitFeatureList[1])) {
+      todoPolygon = splitFeatureList[0];
+    } else {
+      todoPolygon = splitFeatureList[1];
+    }
+    todoPolygon.properties = attr;
+    // 添加新图形
+    const newPolygon = new GeoJSON().readFeature(todoPolygon);
+    this.renderLayer.getSource().addFeature(newPolygon);
+    // 删除原始图形
+    this.renderLayer.getSource().removeFeature(this.selectedFeature[0]);
+
+    this.selectedFeature = [newPolygon];
+    this._clearDrawEffect(lineString);
   }
 
   // 同步编辑图层
@@ -525,6 +532,11 @@ class GeometryEdit {
     this.editLayerSource.addFeatures(new GeoJSON().readFeatures(result));
   }
 
+  _clearDrawEffect(feature) {
+    this.renderLayer.once("postrender", () => {
+      this.renderLayerSource.removeFeature(feature);
+    });
+  }
   // 检查是否有活跃工具冲突，返回布尔值
   _checkActiveTool(selfTool) {
     if (this.activeTool.value && this.activeTool.value !== selfTool) {
@@ -661,6 +673,97 @@ class GeometryEdit {
       style: editLayerStyle,
     });
     return editLayer;
+  }
+  
+  // 处理重叠图斑
+  _handleOverlappingFeatures(features) {
+    // 保存当前重叠的图斑
+    this.overlappingFeatures = features;
+    
+    // 如果有弹窗回调函数，显示弹窗
+    if (this.showFeatureDialog) {
+      const callbacks = {};
+      this.showFeatureDialog(features, callbacks);
+      // 注意：这里不等待Promise，因为弹窗的确认/取消会通过回调函数处理
+    } else {
+      // 如果没有弹窗功能，默认选择第一个
+      console.warn("未提供弹窗回调函数，默认选择第一个图斑");
+      this._selectFeature(features[0]);
+    }
+  }
+
+  // 处理用户选择图斑（从弹窗确认）
+  _handleFeatureSelect(feature) {
+    this._selectFeature(feature);
+    // 清空重叠图斑列表
+    this.overlappingFeatures = [];
+  }
+
+  // 处理用户取消选择（从弹窗取消）
+  _handleFeatureCancel() {
+    // 清空重叠图斑列表，不选择任何图斑
+    this.overlappingFeatures = [];
+  }
+
+  // 选中图斑的通用方法
+  _selectFeature(feature) {
+    // 如果已经选中，则取消选中
+    if (this.selectedFeature.includes(feature)) {
+      feature.set("_status", "normal");
+      this.selectedFeature.splice(
+        this.selectedFeature.indexOf(feature),
+        1
+      );
+    } else {
+      // 添加选中
+      feature.set("_status", "selected");
+      this.selectedFeature.unshift(feature);
+    }
+  }
+  // 需要开启图斑选择功能
+  _addSelectInteraction() {
+    this.map.on("click", (e) => {
+      if (this.activeTool.value) {
+        // 处在操作中 不进行选择
+        return;
+      }
+      // getFeaturesAtPixel
+      const features = this.map.getFeaturesAtPixel(e.pixel, {
+        layerFilter: (layer) => {
+          return layer === this.renderLayer;
+        },
+      });
+
+      // 处理重复图斑
+      if (features.length > 1) {
+        // 重叠图斑 需要选择
+        this._handleOverlappingFeatures(features);
+      } else {
+        const feature = features[0];
+        // 点击空白移出所有
+        if (!feature) {
+          this.selectedFeature.forEach((feature) => {
+            feature.set("_status", "normal");
+          });
+          this.selectedFeature = [];
+        } else {
+          // 已经选中 则取消选中
+          if (this.selectedFeature.includes(feature)) {
+            // 删除
+            feature.set("_status", "normal");
+            this.selectedFeature.splice(
+              this.selectedFeature.indexOf(feature),
+              1
+            );
+          } else {
+            // 添加
+            feature.set("_status", "selected");
+            // NOTICE 为什么从前边开始加？忘了，以后看
+            this.selectedFeature.unshift(feature);
+          }
+        }
+      }
+    });
   }
 }
 

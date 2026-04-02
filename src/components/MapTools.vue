@@ -8,7 +8,7 @@
     <ToolButton :isActive="activeTool === MAP_TOOL.MERGE" @click="tools?.merge()">合并</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.MASK" @click="tools?.mask()">挖洞</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.BREAK_UP" @click="tools?.breakUp()">打散</ToolButton>
-    <ToolButton :isActive="activeTool === MAP_TOOL.SHAPE" @click="tools?.shape()">图斑整形</ToolButton>
+    <ToolButton :isActive="activeTool === MAP_TOOL.PLASTIC" @click="tools?.plastic()">图斑整形</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.DELETE" @click="tools?.delete()">删除</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.BACK" @click="tools?.back()">后退</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.FORWARD" @click="tools?.forward()">前进</ToolButton>
