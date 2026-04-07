@@ -1,7 +1,8 @@
 <template>
   <div class="map-tools">
     <ToolButton :isActive="activeTool === MAP_TOOL.ADD_NEW" @click="tools?.addNew()">新增</ToolButton>
-    <ToolButton :isActive="activeTool === MAP_TOOL.COMMON_LINE_ADD_NEW" @click="tools?.commonLineAdd()">共边画面</ToolButton>
+    <ToolButton :isActive="activeTool === MAP_TOOL.COMMON_LINE_ADD_NEW" @click="tools?.commonLineAdd()">共边画面
+    </ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.EDIT" @click="tools?.edit()">编辑节点</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.FEATURE_TRANSFER" @click="tools?.featureTransfer()">重画</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.SPLIT" @click="tools?.split()">拆分</ToolButton>
@@ -9,20 +10,14 @@
     <ToolButton :isActive="activeTool === MAP_TOOL.MASK" @click="tools?.mask()">挖洞</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.BREAK_UP" @click="tools?.breakUp()">打散</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.PLASTIC" @click="tools?.plastic()">图斑整形</ToolButton>
-    <ToolButton :isActive="activeTool === MAP_TOOL.DELETE" @click="tools?.delete()">删除</ToolButton>
+    <ToolButton :isActive="activeTool === MAP_TOOL.DELETE" @click="tools?.remove()">删除</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.BACK" @click="tools?.back()">后退</ToolButton>
     <ToolButton :isActive="activeTool === MAP_TOOL.FORWARD" @click="tools?.forward()">前进</ToolButton>
-    <ToolButton :isActive="activeTool === MAP_TOOL.SAVE" @click="tools?.save()">保存</ToolButton>
+    <!-- <ToolButton :isActive="activeTool === MAP_TOOL.SAVE" @click="tools?.save()">保存</ToolButton> -->
   </div>
-  
   <!-- 图斑选择弹窗 -->
-  <FeatureSelectDialog
-    :visible="dialogVisible"
-    :features="dialogFeatures"
-    @confirm="handleDialogConfirm"
-    @cancel="handleDialogCancel"
-    @hover="handleDialogHover"
-  />
+  <FeatureSelectDialog :visible="dialogVisible" :features="dialogFeatures" @confirm="handleDialogConfirm"
+    @cancel="handleDialogCancel" @hover="handleDialogHover" />
 </template>
 
 <script setup>
@@ -31,6 +26,9 @@ import FeatureSelectDialog from './FeatureSelectDialog.vue'
 import GeometryEdit from '../utils/Geometry-Edit'
 import { onMounted, shallowRef, ref } from 'vue'
 import { MAP_TOOL } from '../const'
+import features from '../../public/features.js'
+import GeoJSON from 'ol/format/GeoJSON'
+
 const tools = shallowRef(null)
 const activeTool = ref(null)
 
@@ -49,14 +47,14 @@ onMounted(() => {
     dialogFeatures.value = features
     dialogVisible.value = true
     dialogHoverIndex.value = -1
-    
+
     // 记录每个图斑的原始状态
     featureOriginalStatus.clear()
     features.forEach((feature, index) => {
       const originalStatus = feature.get('_status') || 'normal'
       featureOriginalStatus.set(feature, originalStatus)
     })
-    
+
     // 返回一个Promise，用于等待用户选择
     return new Promise((resolve, reject) => {
       // 将resolve和reject保存到回调对象中
@@ -64,11 +62,17 @@ onMounted(() => {
       callbacks.reject = reject
     })
   }
-  
-  tools.value = new GeometryEdit(props.map, { 
+
+  tools.value = new GeometryEdit(props.map, {
     activeToolRef: activeTool,
     showFeatureDialog: showFeatureDialog
   })
+
+  // 添加图斑
+  tools.value.renderLayerSource.addFeatures(
+    new GeoJSON().readFeatures(features)
+
+  )
 })
 
 // 弹窗确认
@@ -82,7 +86,7 @@ const handleDialogConfirm = (feature, index) => {
   dialogFeatures.value = []
   dialogHoverIndex.value = -1
   featureOriginalStatus.clear()
-  
+
   // 通知 GeometryEdit 用户选择了哪个图斑
   if (tools.value && tools.value._handleFeatureSelect) {
     tools.value._handleFeatureSelect(feature)
@@ -100,7 +104,7 @@ const handleDialogCancel = () => {
   dialogFeatures.value = []
   dialogHoverIndex.value = -1
   featureOriginalStatus.clear()
-  
+
   // 通知 GeometryEdit 用户取消了选择
   if (tools.value && tools.value._handleFeatureCancel) {
     tools.value._handleFeatureCancel()
@@ -118,7 +122,7 @@ const handleDialogHover = (index) => {
       prevFeature.set('_status', originalStatus)
     }
   }
-  
+
   // 设置新的高亮（hover 优先级最高）
   if (index >= 0 && index < dialogFeatures.value.length) {
     const feature = dialogFeatures.value[index]
@@ -140,4 +144,3 @@ const handleDialogHover = (index) => {
   padding: 8px;
 }
 </style>
-

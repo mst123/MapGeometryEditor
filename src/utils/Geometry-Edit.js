@@ -491,6 +491,19 @@ class GeometryEdit {
     });
   }
 
+  // 删除
+  remove() {
+    if (this.selectedFeature.length === 0) {
+      message.error("请选择要删除的图形！");
+      return;
+    }
+    this.selectedFeature.forEach((feature) => {
+      this.renderLayerSource.removeFeature(feature);
+    });
+    this.selectedFeature = [];
+  }
+    
+
   _plasticSplit(lineString, removeFeaGeoArr) {
     let todoPolygon = new GeoJSON().writeFeatureObject(this.selectedFeature[0]);
     if (todoPolygon.geometry.type === "MultiPolygon" && todoPolygon.geometry.coordinates[0].length > 1) { // 转为普通面
@@ -537,6 +550,7 @@ class GeometryEdit {
       this.renderLayerSource.removeFeature(feature);
     });
   }
+
   // 检查是否有活跃工具冲突，返回布尔值
   _checkActiveTool(selfTool) {
     if (this.activeTool.value && this.activeTool.value !== selfTool) {

@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted,  shallowRef  } from 'vue'
+import { onMounted, shallowRef } from 'vue'
 import "ol/ol.css";
 import Map from "ol/Map";
 import View from "ol/View";
@@ -25,9 +25,11 @@ onMounted(() => {
       projection: "EPSG:4326",
       center: [103, 36],
       zoom: 7,
-      maxZoom: 18
+      maxZoom: 20
     })
   })
+
+
 })
 </script>
 <style scoped>
@@ -35,7 +37,8 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   position: relative;
-  .map-tools{
+
+  .map-tools {
     position: absolute;
     top: 50px;
     right: 50px;
